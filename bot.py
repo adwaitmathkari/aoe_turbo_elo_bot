@@ -12,6 +12,8 @@ load_dotenv()
 ################################################## Constants Start #################################################
 
 PLAYER_FILE = "players.json"
+TEN_TIMES_LIKELY_WIN_AVG_RATING_DIFF = 100
+K_FACTOR = 12
 #TODO move this list to file
 AUTHORIZED_USERS =  ['adwaitmathkari', 'mania4861', 'bajirao2', 'darklordkunal', '2kminus1', 'adityasj3053', 'adityasj.','ajeya7182', '.sidonkar', 'sarthakss', 'shalmal90']
 
@@ -343,33 +345,18 @@ class WinnerButton(Button):
                 ephemeral=True)
             return
 
-        # Get total team ratings
-        winning_team_rating = sum(players[p]["current_rating"] for p in self.winning_team)
-        losing_team_rating = sum(players[p]["current_rating"] for p in self.losing_team)
-        rating_diff = abs(winning_team_rating - losing_team_rating)
-
-        # Default gains/losses
-        base_gain = 6
-        base_loss = -6
-
-        if rating_diff >= 100:  # Large difference case
-            if winning_team_rating < losing_team_rating:  # Underdog wins
-                gain, loss = 8, -8
-            else:  # Favorite wins
-                gain, loss = 4, -4
-        else:
-            gain, loss = base_gain, base_loss
+        change = update_elo_ratings(self.winning_team, self.losing_team, K_FACTOR)
 
         # Update ratings and generate message
         message = "🏆 **Match Result**\n\n"
 
         for player in self.winning_team:
-            players[player]["current_rating"] += gain
-            message += f"✅ **{player}**: +{gain} (New: {players[player]['current_rating']})\n"
+            players[player]["current_rating"] += change
+            message += f"✅ **{player}**: +{change} (New: {players[player]['current_rating']})\n"
 
         for player in self.losing_team:
-            players[player]["current_rating"] += loss
-            message += f"❌ **{player}**: {loss} (New: {players[player]['current_rating']})\n"
+            players[player]["current_rating"] -= change
+            message += f"❌ **{player}**: {change} (New: {players[player]['current_rating']})\n"
 
         # Save updated ratings
         save_players()
@@ -380,22 +367,23 @@ class WinnerButton(Button):
 
 
 
-def update_elo_ratings(winning_team, losing_team, k_factor=10):  
-    rating_changes = {}
+def update_elo_ratings(winning_team, losing_team, k_factor= K_FACTOR):
 
+    winning_team_rating = 0.0
+    winning_player_count = 0
     for player in winning_team:
-        old_rating = players[player]["current_rating"]
-        change = k_factor  
-        players[player]["current_rating"] += change
-        rating_changes[player] = (players[player]["current_rating"], change)  # Store (new_rating, change)
+        winning_team_rating += players[player]["current_rating"]
+        winning_player_count += 1.0
 
+    losing_team_rating = 0
+    losing_player_count = 0
     for player in losing_team:
-        old_rating = players[player]["current_rating"]
-        change = -k_factor  
-        players[player]["current_rating"] += change
-        rating_changes[player] = (players[player]["current_rating"], change)  # Store (new_rating, change)
+        losing_team_rating += players[player]["current_rating"]
+        losing_player_count += 1.0
 
-    return rating_changes
+    win_probability = 1.0/(1+10**((winning_team_rating/winning_player_count - losing_team_rating/losing_player_count)/TEN_TIMES_LIKELY_WIN_AVG_RATING_DIFF))
+
+    return k_factor*(1-win_probability)
 
 
 
